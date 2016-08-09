@@ -1,0 +1,141 @@
+#! /bin/bash
+
+if [ "$(basename "$(readlink /proc/"$$"/exe)")" != 'bash' ]; then
+  echo "Please use bash to run this script" >&2
+  exit 2
+fi
+
+conf_file=~/.tunnel
+
+function parse
+{
+  eval "$1=$(sed -n "s/$1[[:space:]]*=[[:space:]]*\(.*\)/\1/p" $2)"
+}
+
+function check_active_tunnels
+{
+  if [ "$(ls -l /tmp/tunnel-*.cfg 2> /dev/null | wc -l)" -eq 0 ]; then
+    echo "No active tunnel"
+    return 1
+  else
+    return 0
+  fi
+}
+
+function check_status
+{
+  local IFS= # null IFS for security to avoid quoting for globbing below
+  for file in /tmp/tunnel-${2:-*}.cfg; do
+    parse local_port "$file"
+    parse ssh_port "$file"
+    parse target "$file"
+    curl -m 3 localhost:"$local_port" &> /dev/null
+    "$1" "$?" "$local_port" "$ssh_port"
+  done
+}
+
+function print_status
+{
+  printf "tunnel: $local_port -> $ssh_port ($target)"
+  if [ "$1" -eq 0 ]; then
+    echo -e '\033[0;32m OK\033[0m'
+  else
+    echo -e '\033[0;31m KO\033[0m'
+  fi
+}
+
+function stop_tunnel
+{
+  if [ -f "/tmp/tunnel-$1.cfg" ]; then
+    parse pid "/tmp/tunnel-$1.cfg"
+    if [ "$(ps -p "$pid" -o comm=)" = 'ssh' ]; then
+      kill -s SIGTERM "$pid"
+    fi
+  fi
+}
+
+function create_ssh_tunnel
+{
+  if [ "$1" -ne 0 ]; then
+    stop_tunnel "$2"
+    echo -e "local_port=$2\nssh_port=$3\ntarget=$target" > /tmp/tunnel-"$2".cfg
+    ssh -fNL "$2:$target:$3" "$address" &>> /tmp/tunnel-"$2".log
+    pid=$(ps aux | sed -n "s/[^ ]*\s*\([^ ]*\).*ssh -fNL $2.*/\1/p")
+    echo "pid=$pid" >> /tmp/tunnel-"$2".cfg
+  fi
+}
+
+function clean
+{
+  if [ "$1" -ne 0 ]; then
+    stop_tunnel "$2"
+    rm /tmp/tunnel-"$2".*
+  fi
+}
+
+if [ -f "$conf_file" ]; then
+  parse address "$conf_file"
+  parse target  "$conf_file"
+  if [ -z "$target" ]; then
+    target=localhost
+  fi
+else
+  printf "Enter your ssh address\n> "
+  read address
+  echo "address=$address" >> ~/.tunnel
+  printf "Enter your tunnel target\n> "
+  read target
+  echo "target=$target" >> ~/.tunnel
+  echo
+fi
+
+if [ "$#" -lt 1 ]; then
+  check_active_tunnels
+  if [ "$?" -eq 0 ]; then
+    check_status print_status
+  fi
+else
+  case "$1" in
+    stop|s)
+      if [ -z "$2" ]; then
+        for file in /tmp/tunnel-*.cfg; do
+          parse local_port "$file"
+          stop_tunnel "$local_port"
+        done
+      else
+        stop_tunnel "$2"
+      fi
+      ;;
+    restart|r)
+      check_status create_ssh_tunnel "$2"
+      ;;
+    clean|c)
+      check_status clean "$2"
+      ;;
+    config|cfg)
+      "$EDITOR" ~/.tunnel
+      ;;
+    help|h|--help|-h)
+      echo 'Usage: tunnel [options]
+
+      Displays tunnels status when launched with no options.
+
+      Options:
+
+            local-port  distant-port     creates a tunnel from your your ssh address on distant-port to localhost on local-port
+            stop, s     [local-port]     stops local-port tunnel or all tunnels if no port is specified
+            clean, c    [local-port]     removes local-port tunnel if stopped or all stopped tunnels if no port is specified
+            restart, r  [local-port]     restarts local-port tunnel if stopped or all stopped tunnels if no port is specified
+            config, cfg                  opens the configuration file with your default editor
+      '
+      ;;
+    *)
+      if [ "$#" -eq 2 ] && (($1 > 0)) && (($2 > 0)); then
+        create_ssh_tunnel 1 "$1" "$2"
+      else
+        echo 'tunnel: Invalid Command' >&2
+        exit 1
+      fi
+      ;;
+  esac
+fi
