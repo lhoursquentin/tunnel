@@ -29,7 +29,7 @@ function check_status
     parse local_port "$file"
     parse ssh_port "$file"
     parse target "$file"
-    curl -m 3 localhost:"$local_port" &> /dev/null
+    curl -m 3 127.0.0.1:"$local_port" &> /dev/null
     "$1" "$?" "$local_port" "$ssh_port"
   done
 }
@@ -60,7 +60,8 @@ function create_ssh_tunnel
     stop_tunnel "$2"
     echo -e "local_port=$2\nssh_port=$3\ntarget=$target" > /tmp/tunnel-"$2".cfg
     ssh -fNL "$2:$target:$3" "$address" &>> /tmp/tunnel-"$2".log
-    pid=$(ps aux | sed -n "s/[^ ]*\s*\([^ ]*\).*ssh -fNL $2.*/\1/p")
+    pid_aux=$(ps aux)
+    pid="$(echo "$pid_aux" | sed -n "s/[^ ]*[[:space:]]*\([^[:space:]]*\).*ssh -fNL $2.*/\1/p")"
     echo "pid=$pid" >> /tmp/tunnel-"$2".cfg
   fi
 }
