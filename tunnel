@@ -1,8 +1,11 @@
 #! /bin/bash
 
-if [ -e "/proc" ] && [ "$(basename "$(readlink /proc/"$$"/exe)")" != 'bash' ]; then
-  echo "Please use bash to run this script" >&2
-  exit 2
+if [ -z "$BASH_VERSION" ]; then
+  echo 'Please use bash to run this script' >&2
+  exit 1
+elif [ "$(echo "$BASH_VERSION" | cut -c 1)" -lt 4 ]; then
+  echo 'Please update bash to version 4' >&2
+  exit 1
 fi
 
 conf_file=~/.tunnel
