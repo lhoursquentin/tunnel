@@ -1,6 +1,6 @@
 #! /bin/bash
 
-if [ "$(basename "$(readlink /proc/"$$"/exe)")" != 'bash' ]; then
+if [ -e "/proc" ] && [ "$(basename "$(readlink /proc/"$$"/exe)")" != 'bash' ]; then
   echo "Please use bash to run this script" >&2
   exit 2
 fi
@@ -60,8 +60,8 @@ function create_ssh_tunnel
     stop_tunnel "$2"
     echo -e "local_port=$2\nssh_port=$3\ntarget=$target" > /tmp/tunnel-"$2".cfg
     ssh -fNL "$2:$target:$3" "$address" &>> /tmp/tunnel-"$2".log
-    pid_aux=$(ps aux)
-    pid="$(echo "$pid_aux" | sed -n "s/[^ ]*[[:space:]]*\([^[:space:]]*\).*ssh -fNL $2.*/\1/p")"
+    ps_ouput="$(ps aux)"
+    pid="$(sed -n "s/[^[:space:]]*[[:space:]]*\([^[:space:]]*\).*ssh -fNL $2.*/\1/p" <<< "$ps_ouput")"
     echo "pid=$pid" >> /tmp/tunnel-"$2".cfg
   fi
 }
@@ -114,7 +114,7 @@ else
       check_status clean "$2"
       ;;
     config|cfg)
-      "$EDITOR" ~/.tunnel
+      $EDITOR ~/.tunnel
       ;;
     help|h|--help|-h)
       echo 'Usage: tunnel [options]
