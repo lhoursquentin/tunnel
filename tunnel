@@ -3,7 +3,7 @@
 if [ -z "$BASH_VERSION" ]; then
   echo 'Please use bash to run this script' >&2
   exit 1
-elif [ "$(echo "$BASH_VERSION" | cut -c 1)" -lt 4 ]; then
+elif [ "${BASH_VERSION%%.*}" != 4 ]; then
   echo 'Please update bash to version 4' >&2
   exit 1
 fi
@@ -12,22 +12,21 @@ conf_file=~/.tunnel
 
 function parse
 {
-  eval "$1=$(sed -n "s/$1[[:space:]]*=[[:space:]]*\(.*\)/\1/p" $2)"
+  declare -g "$1=$(sed -n "s/$1[[:space:]]*=[[:space:]]*\(.*\)/\1/p" $2)"
 }
 
 function check_active_tunnels
 {
-  if [ "$(ls -l /tmp/tunnel-*.cfg 2> /dev/null | wc -l)" -eq 0 ]; then
-    echo "No active tunnel"
-    return 1
-  else
+  ls /tmp/tunnel-*.cfg &> /dev/null &&
     return 0
-  fi
+
+  echo "No active tunnel"
+  return 1
 }
 
 function check_status
 {
-  local IFS= # null IFS for security to avoid quoting for globbing below
+  local IFS=
   for file in /tmp/tunnel-${2:-*}.cfg; do
     parse local_port "$file"
     parse ssh_port "$file"
@@ -39,11 +38,11 @@ function check_status
 
 function print_status
 {
-  printf "tunnel: $local_port -> $ssh_port ($target)"
+  printf "tunnel: %s -> %s (%s)" "$local_port" "$ssh_port" "$target"
   if [ "$1" -eq 0 ]; then
-    echo -e '\033[0;32m OK\033[0m'
+    printf '\033[0;32m OK\033[0m\n'
   else
-    echo -e '\033[0;31m KO\033[0m'
+    printf '\033[0;31m KO\033[0m\n'
   fi
 }
 
@@ -61,11 +60,11 @@ function create_ssh_tunnel
 {
   if [ "$1" -ne 0 ]; then
     stop_tunnel "$2"
-    echo -e "local_port=$2\nssh_port=$3\ntarget=$target" > /tmp/tunnel-"$2".cfg
+    printf "local_port=%s\nssh_port=%s\ntarget=%s\n" "$2" "$3" "$target" > /tmp/tunnel-"$2".cfg
     ssh -fNL "$2:$target:$3" "$address" &>> /tmp/tunnel-"$2".log
     ps_ouput="$(ps aux)"
     pid="$(sed -n "s/[^[:space:]]*[[:space:]]*\([^[:space:]]*\).*ssh -fNL $2.*/\1/p" <<< "$ps_ouput")"
-    echo "pid=$pid" >> /tmp/tunnel-"$2".cfg
+    printf 'pid=%s\n' "$pid" >> /tmp/tunnel-"$2".cfg
   fi
 }
 
@@ -80,16 +79,13 @@ function clean
 if [ -f "$conf_file" ]; then
   parse address "$conf_file"
   parse target  "$conf_file"
-  if [ -z "$target" ]; then
-    target=localhost
-  fi
+  : ${target:=localhost}
 else
   printf "Enter your ssh address\n> "
   read address
-  echo "address=$address" >> ~/.tunnel
   printf "Enter your tunnel target\n> "
   read target
-  echo "target=$target" >> ~/.tunnel
+  printf 'address=%s\ntarget=%s\n' "$address" "$target" > ~/.tunnel
   echo
 fi
 
@@ -117,7 +113,7 @@ else
       check_status clean "$2"
       ;;
     config|cfg)
-      $EDITOR ~/.tunnel
+      ${EDITOR:-vi} ~/.tunnel
       ;;
     help|h|--help|-h)
       echo 'Usage: tunnel [options]
