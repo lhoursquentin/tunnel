@@ -1,42 +1,35 @@
-#! /bin/bash
+#! /bin/sh
 
-if [ -z "$BASH_VERSION" ]; then
-  echo 'Please use bash to run this script' >&2
-  exit 1
-elif [ "${BASH_VERSION%%.*}" != 4 ]; then
-  echo 'Please update bash to version 4' >&2
-  exit 1
-fi
+[ -n "$ZSH_VERSION" ] && setopt +o nomatch # Remove glob errors if zsh is used
 
 conf_file=~/.tunnel
 
-function parse
+parse()
 {
-  declare -g "$1=$(sed -n "s/$1[[:space:]]*=[[:space:]]*\(.*\)/\1/p" $2)"
+  eval "$1=$(sed -n "s/$1[[:space:]]*=[[:space:]]*\(.*\)/\1/p" $2)"
 }
 
-function check_active_tunnels
+check_active_tunnels()
 {
-  ls /tmp/tunnel-*.cfg &> /dev/null &&
+  ls /tmp/tunnel-*.cfg > /dev/null 2>&1 &&
     return 0
 
   echo "No active tunnel"
   return 1
 }
 
-function check_status
+check_status()
 {
-  local IFS=
   for file in /tmp/tunnel-${2:-*}.cfg; do
     parse local_port "$file"
     parse ssh_port "$file"
     parse target "$file"
-    curl -m 3 127.0.0.1:"$local_port" &> /dev/null
+    curl -m 2 127.0.0.1:"$local_port" > /dev/null 2>&1
     "$1" "$?" "$local_port" "$ssh_port"
   done
 }
 
-function print_status
+print_status()
 {
   printf "tunnel: %s -> %s (%s)" "$local_port" "$ssh_port" "$target"
   if [ "$1" -eq 0 ]; then
@@ -46,29 +39,29 @@ function print_status
   fi
 }
 
-function stop_tunnel
+stop_tunnel()
 {
   if [ -f "/tmp/tunnel-$1.cfg" ]; then
     parse pid "/tmp/tunnel-$1.cfg"
     if [ "$(ps -p "$pid" -o comm=)" = 'ssh' ]; then
-      kill -s SIGTERM "$pid"
+      kill -s TERM "$pid"
     fi
   fi
 }
 
-function create_ssh_tunnel
+create_ssh_tunnel()
 {
   if [ "$1" -ne 0 ]; then
     stop_tunnel "$2"
+    ssh -fNL "$2:$target:$3" "$address" >> /tmp/tunnel-"$2".log 2>&1
     printf "local_port=%s\nssh_port=%s\ntarget=%s\n" "$2" "$3" "$target" > /tmp/tunnel-"$2".cfg
-    ssh -fNL "$2:$target:$3" "$address" &>> /tmp/tunnel-"$2".log
     ps_ouput="$(ps aux)"
-    pid="$(sed -n "s/[^[:space:]]*[[:space:]]*\([^[:space:]]*\).*ssh -fNL $2.*/\1/p" <<< "$ps_ouput")"
+    pid="$(printf '%s' "$ps_ouput" | sed -n "s/[^[:space:]]*[[:space:]]*\([^[:space:]]*\).*ssh -fNL $2.*/\1/p")"
     printf 'pid=%s\n' "$pid" >> /tmp/tunnel-"$2".cfg
   fi
 }
 
-function clean
+clean()
 {
   if [ "$1" -ne 0 ]; then
     stop_tunnel "$2"
@@ -130,7 +123,7 @@ else
       '
       ;;
     *)
-      if [ "$#" -eq 2 ] && (($1 > 0)) && (($2 > 0)); then
+      if [ "$#" -eq 2 ] && [ "$1" -gt 0 ] && [ "$2" -gt 0 ]; then
         create_ssh_tunnel 1 "$1" "$2"
       else
         echo 'tunnel: Invalid Command' >&2

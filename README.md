@@ -7,7 +7,6 @@ stop, and restart ssh tunnels easily.
 
 None if you are on a standard linux distribution, else:
 
-* bash 4+
 * curl
 * ssh
 
