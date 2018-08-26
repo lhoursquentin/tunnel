@@ -7,7 +7,8 @@ stop, and restart ssh tunnels easily.
 
 None if you are on a standard linux distribution, else:
 
-* curl
+* nc
+* ps
 * ssh
 
 ## Usage
