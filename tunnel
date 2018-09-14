@@ -55,7 +55,7 @@ create_ssh_tunnel()
   if [ "$1" -ne 0 ]; then
     stop_tunnel "$2"
     if ! ssh -fNL "$2:$target:$3" -p "$ssh_port" "$user"@"$address" >> /tmp/tunnel-"$2".log 2>&1; then
-      printf '\033[0;31mError\033[0m\n - Failed to create tunnel\n' >&2
+      printf '\033[0;31mError\033[0m - Failed to create tunnel\n' >&2
       cat /tmp/tunnel-"$2".log >&2
       return 1
     fi
